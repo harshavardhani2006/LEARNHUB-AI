@@ -3,7 +3,7 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "backend/api/index.py": {
+    "api/index.py": {
       "runtime": "vercel-python@3.0.7",
       "maxDuration": 60
     }
@@ -11,11 +11,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/health",
-      "dest": "backend/api/index.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
