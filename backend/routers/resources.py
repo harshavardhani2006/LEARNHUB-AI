@@ -307,8 +307,15 @@ async def delete_resource(resource_id: str, current_user: dict = Depends(get_cur
     except:
         pass
 
-    if resource.get("uploaded_by") != user_id and not is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this resource")
+    # Also check uploaded_by matches — note: user_id comes from JWT 'sub' claim
+    uploaded_by = resource.get("uploaded_by")
+    is_owner = (uploaded_by == user_id)
+
+    if not is_owner and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Failed to delete resource. Only owners and admins can delete resources."
+        )
 
     # Extract filename from file_url using the Supabase public URL pattern
     file_url = resource.get("file_url", "")
