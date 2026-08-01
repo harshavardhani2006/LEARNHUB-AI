@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 
+// In production on Vercel, VITE_API_URL is empty so all requests go to
+// the same domain under /api (routed to the Python serverless function).
+// In local dev it falls back to http://localhost:8000.
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:8000');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
