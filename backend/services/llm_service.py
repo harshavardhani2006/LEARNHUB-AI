@@ -155,7 +155,7 @@ class LLMService:
             response = client.chat_completion(
                 model=model,
                 messages=messages,
-                max_tokens=1024,
+                max_tokens=512,
                 temperature=0.3
             )
             return response.choices[0].message.content
@@ -165,15 +165,14 @@ class LLMService:
     @classmethod
     async def generate_summary(cls, document_text: str) -> dict:
         """Generate structured document summary, key topics, difficulty, and reading time."""
-        # Simple reading time estimator (~200 words per minute)
         word_count = len(document_text.split())
         reading_time_mins = max(1, round(word_count / 200))
         reading_time_str = f"~{reading_time_mins} minutes"
         
-        # Limit input text length to avoid context window overflow (safely take first 4000 characters)
-        sample_text = document_text[:8000]
+        # Limit input to avoid context window overflow
+        sample_text = document_text[:6000]
 
-        prompt = f"<|system|>\nYou are an academic assistant. Analyze the document text and output ONLY a valid JSON object with the keys 'summary', 'key_topics', and 'difficulty'. Do not include any other markdown code-block symbols, comments, or conversational text. Example format:\n{{\"summary\": \"Exactly 5 sentences summarizing the material...\", \"key_topics\": [\"Topic 1\", \"Topic 2\", \"Topic 3\"], \"difficulty\": \"Beginner/Intermediate/Advanced\"}}\n</s>\n<|user|>\nDocument content:\n{sample_text}\n</s>\n<|assistant|>\n"
+        prompt = f"<|system|>\nYou are an academic assistant. Analyze the document text and output ONLY a valid JSON object with the keys 'summary', 'key_topics', and 'difficulty'. Do not include any other markdown code-block symbols, comments, or conversational text. Example format:\n{{\"summary\": \"Exactly 3 sentences summarizing the material...\", \"key_topics\": [\"Topic 1\", \"Topic 2\", \"Topic 3\"], \"difficulty\": \"Beginner/Intermediate/Advanced\"}}\n</s>\n<|user|>\nDocument content:\n{sample_text}\n</s>\n<|assistant|>\n"
         
         try:
             raw_output = await cls.query_model_direct(prompt)
