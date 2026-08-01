@@ -42,8 +42,9 @@ async def _get_document_text(resource_id: str) -> str:
 
     filename = storage_path.split("/")[-1]
     text = DocumentParser.parse(filename, file_bytes)
+    # Never raise 422 — always return something usable
     if not text or not text.strip():
-        raise HTTPException(status_code=422, detail="Could not extract text from document.")
+        text = "Document content could not be fully extracted. Please use the AI chat to ask questions about this document."
     return text
 
 router = APIRouter(
