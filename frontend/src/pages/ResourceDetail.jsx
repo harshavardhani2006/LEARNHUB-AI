@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { supabase } from '../services/supabase';
 import PDFViewer from '../components/workspace/PDFViewer';
 import AIToolCard from '../components/workspace/AIToolCard';
 import ToolsOutputPanel from '../components/workspace/ToolsOutputPanel';
@@ -220,52 +219,19 @@ export const ResourceDetail = () => {
     setChatMessages(prev => [...prev, assistantMsgPlaceholder]);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      // Stream response using fetch SSE
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          conversation_id: chatConvId,
-          message: text,
-          resource_id: id
-        })
+      // Use axios api instance — handles auth automatically, returns JSON
+      const res = await api.post('/chat', {
+        conversation_id: chatConvId,
+        message: text,
+        resource_id: id
       });
 
-      if (!response.ok) throw new Error();
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let answer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.trim().startsWith('data:')) {
-            try {
-              const data = JSON.parse(line.substring(5).trim());
-              if (data.done) break;
-              if (data.token) {
-                answer += data.token;
-                setChatMessages(prev =>
-                  prev.map(m => m.id === 'temp-a' ? { ...m, message: answer } : m)
-                );
-              }
-            } catch {}
-          }
-        }
-      }
+      const answer = res.data.reply || '';
+      setChatMessages(prev =>
+        prev.map(m => m.id === 'temp-a' ? { ...m, message: answer } : m)
+      );
     } catch (err) {
-      setChatError('Failed to fetch streamed answer.');
+      setChatError('Failed to get AI response. Please try again.');
       setChatMessages(prev =>
         prev.map(m => m.id === 'temp-a' ? { ...m, message: '⚠️ Error: Connection failed.' } : m)
       );

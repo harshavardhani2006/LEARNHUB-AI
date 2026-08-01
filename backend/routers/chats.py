@@ -202,28 +202,27 @@ async def chat_interaction(
     history_resp = supabase.table("messages").select("sender, message").eq("conversation_id", conversation_id).order("created_at", desc=False).limit(10).execute()
     history = history_resp.data or []
 
-    # 4. Stream response from LLM Service
+    # 4. Get full response from LLM (non-streaming for Vercel serverless compatibility)
     system_prompt = "You are LearnHub AI Tutor, a friendly educational assistant."
-    
-    async def response_streamer():
-        full_response = ""
-        # Get streaming generator
+
+    full_response = ""
+    try:
         stream_generator = LLMService.stream_chat(
             system_prompt=system_prompt,
             context=context_chunks,
             history=history,
             query=user_message
         )
-        
         async for token in stream_generator:
             full_response += token
-            # Yield token for EventSource/SSE format
-            yield f"data: {json.dumps({'token': token})}\n\n"
-            
-        yield f"data: {json.dumps({'done': True})}\n\n"
-        
-        # Save user & assistant messages to PostgreSQL database
-        # Spawning as background task to respond immediately
-        background_tasks.add_task(save_chat_messages, conversation_id, user_message, full_response)
+    except Exception as e:
+        full_response = f"I encountered an error generating a response: {str(e)}"
 
-    return StreamingResponse(response_streamer(), media_type="text/event-stream")
+    # 5. Save messages to DB
+    background_tasks.add_task(save_chat_messages, conversation_id, user_message, full_response)
+
+    # 6. Return full response as JSON (frontend will display it at once)
+    return {
+        "reply": full_response,
+        "conversation_id": conversation_id
+    }

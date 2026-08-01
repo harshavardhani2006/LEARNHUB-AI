@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import api from '../services/api';
-import { supabase } from '../services/supabase';
 import ConversationList from '../components/chat/ConversationList';
 import ChatMessage from '../components/chat/ChatMessage';
 import ChatInput from '../components/chat/ChatInput';
@@ -214,81 +213,39 @@ export const AITutor = () => {
     setMessages(prev => [...prev, assistantMsgPlaceholder]);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      // To capture the stream with custom Auth headers, we use HTTP POST fetch + TextDecoder
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          conversation_id: currentConvId,
-          message: textToSend,
-          resource_id: resourceIdQuery || undefined
-        })
+      // Use axios api instance (handles auth header automatically)
+      const res = await api.post('/chat', {
+        conversation_id: currentConvId,
+        message: textToSend,
+        resource_id: resourceIdQuery || undefined
       });
 
-      if (!response.ok) {
-        throw new Error('Inference server returned an error.');
-      }
+      const assistantAnswer = res.data.reply || '';
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantAnswer = '';
+      // Update assistant bubble with full response
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === 'temp-assistant'
+            ? { ...msg, message: assistantAnswer }
+            : msg
+        )
+      );
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        // Process SSE lines
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.trim().startsWith('data:')) {
-            try {
-              const data = JSON.parse(line.substring(5).trim());
-              if (data.done) {
-                // Done event
-                break;
-              }
-              if (data.token) {
-                assistantAnswer += data.token;
-                // Update assistant bubble content dynamically
-                setMessages(prev =>
-                  prev.map(msg =>
-                    msg.id === 'temp-assistant'
-                      ? { ...msg, message: assistantAnswer }
-                      : msg
-                  )
-                );
-              }
-            } catch (e) {
-              // Parse warnings or keep parsing other chunks
-            }
-          }
-        }
-      }
-
-      // Re-fetch conversations to sync message counts and titles
+      // Re-fetch conversations to sync titles
       fetchConversations();
 
     } catch (err) {
       console.error(err);
-      setToastError('Lost connection to AI Tutor or stream failed.');
-      // Remove stubs or show error inside bubble
+      setToastError('Lost connection to AI Tutor. Please try again.');
       setMessages(prev =>
         prev.map(msg =>
           msg.id === 'temp-assistant'
-            ? { ...msg, message: '⚠️ Error: Failed to stream AI response. Check your network or HF token.' }
+            ? { ...msg, message: '⚠️ Error: Failed to get AI response. Please try again.' }
             : msg
         )
       );
     } finally {
       setGenerating(false);
-      // Replace temp IDs with real ones on next history fetch
     }
   };
 
