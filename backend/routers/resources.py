@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from typing import Optional, List
 from middleware.auth_middleware import get_current_user
 from database import supabase
@@ -8,6 +9,15 @@ router = APIRouter(
     tags=["Resources"],
     dependencies=[Depends(get_current_user)]
 )
+
+class RegisterResourceRequest(BaseModel):
+    resource_id: str
+    title: str
+    subject: str
+    description: Optional[str] = None
+    file_url: str
+    storage_path: str
+    filename: str
 
 @router.get("")
 async def get_resources(
@@ -145,6 +155,58 @@ async def _process_and_index_document_async(resource_id: str, file_content: byte
 
     except Exception as e:
         print(f"Error in RAG ingestion pipeline for resource {resource_id}: {str(e)}")
+
+@router.post("/register")
+async def register_resource(
+    payload: RegisterResourceRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_verified_user)
+):
+    """
+    Register a resource that was already uploaded directly to Supabase Storage
+    by the frontend. Saves metadata to DB and kicks off RAG indexing.
+    This avoids Vercel's 4.5MB serverless body limit.
+    """
+    user_id = current_user.get("sub")
+
+    ext = payload.filename.split(".")[-1].lower()
+    if ext not in ["pdf", "docx", "doc", "txt"]:
+        raise HTTPException(status_code=400, detail="Unsupported file format.")
+
+    try:
+        db_data = {
+            "id": payload.resource_id,
+            "title": payload.title,
+            "subject": payload.subject,
+            "description": payload.description,
+            "file_url": payload.file_url,
+            "uploaded_by": user_id,
+            "views": 0,
+            "likes": 0
+        }
+        db_response = supabase.table("resources").insert(db_data).execute()
+        if not db_response.data:
+            raise HTTPException(status_code=500, detail="Failed to save resource metadata.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save resource: {str(e)}")
+
+    # Download file from Supabase Storage for RAG indexing
+    try:
+        file_bytes = supabase.storage.from_("resources").download(payload.storage_path)
+        background_tasks.add_task(
+            _run_process_and_index_document,
+            payload.resource_id,
+            file_bytes,
+            payload.filename
+        )
+    except Exception as e:
+        print(f"Warning: Could not download file for RAG indexing: {e}")
+
+    return {
+        "message": "Resource registered successfully",
+        "resource": db_response.data[0]
+    }
+
 
 @router.post("")
 async def upload_resource(

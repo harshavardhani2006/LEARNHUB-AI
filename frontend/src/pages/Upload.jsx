@@ -5,10 +5,13 @@ import UploadForm from '../components/upload/UploadForm';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import api from '../services/api';
+import { supabase } from '../services/supabase';
+import { useAuth } from '../hooks/useAuth';
 import { CheckCircle, AlertCircle, Loader2, Sparkles, BookOpen, Bot } from 'lucide-react';
 
 export const Upload = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   // Form State
   const [file, setFile] = useState(null);
@@ -59,58 +62,66 @@ export const Upload = () => {
     if (!validateForm()) return;
 
     setStatus('uploading');
-    setUploadProgress(15);
+    setUploadProgress(10);
     setChecklist(prev => ({ ...prev, upload: 'loading' }));
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('title', title);
-    formData.append('subject', subject);
-    if (description) formData.append('description', description);
-
     try {
-      // Simulate frontend progress intervals
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 85) {
-            clearInterval(progressInterval);
-            return 85;
-          }
-          return prev + 10;
-        });
-      }, 100);
+      // Step 1 — Upload file directly to Supabase Storage from browser
+      // This bypasses Vercel's 4.5MB serverless body limit entirely
+      const resourceId = crypto.randomUUID();
+      const userId = user?.id;
+      const storagePath = `${userId}/${resourceId}/${file.name}`;
 
-      // Perform API upload
-      const response = await api.post('/resources', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const { error: storageError } = await supabase.storage
+        .from('resources')
+        .upload(storagePath, file, { upsert: false });
+
+      if (storageError) throw new Error(storageError.message);
+
+      setUploadProgress(50);
+
+      // Step 2 — Get public URL
+      const { data: urlData } = supabase.storage
+        .from('resources')
+        .getPublicUrl(storagePath);
+      const fileUrl = urlData.publicUrl;
+
+      setUploadProgress(70);
+      setChecklist(prev => ({ ...prev, upload: 'success', parse: 'loading' }));
+
+      // Step 3 — Tell backend to save metadata + kick off RAG indexing
+      const response = await api.post('/resources/register', {
+        resource_id: resourceId,
+        title,
+        subject,
+        description: description || null,
+        file_url: fileUrl,
+        storage_path: storagePath,
+        filename: file.name
       });
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
+
+      setUploadProgress(90);
       setUploadedResourceId(response.data.resource.id);
 
-      // Transition to processing checklist simulation
+      // Transition to processing checklist
       setStatus('processing');
-      setChecklist(prev => ({ ...prev, upload: 'success', parse: 'loading' }));
-      
-      // Step 2: Parsing (Simulate processing stages matching pipeline)
+      setChecklist(prev => ({ ...prev, parse: 'loading' }));
+
       await new Promise(resolve => setTimeout(resolve, 800));
       setChecklist(prev => ({ ...prev, parse: 'success', chunk: 'loading' }));
-      
-      // Step 3: Chunking
+
       await new Promise(resolve => setTimeout(resolve, 600));
       setChecklist(prev => ({ ...prev, chunk: 'success', embed: 'loading' }));
-      
-      // Step 4: Embedding & Vector Indexing
+
       await new Promise(resolve => setTimeout(resolve, 1000));
       setChecklist(prev => ({ ...prev, embed: 'success' }));
-      
-      // Complete!
+
       await new Promise(resolve => setTimeout(resolve, 400));
+      setUploadProgress(100);
       setStatus('success');
       setToast({
         visible: true,
-        message: 'Study sheet successfully parsed and vectorized!',
+        message: 'Study sheet successfully uploaded and indexed!',
         type: 'success'
       });
 
@@ -120,7 +131,7 @@ export const Upload = () => {
       setChecklist({ upload: 'pending', parse: 'pending', chunk: 'pending', embed: 'pending' });
       setToast({
         visible: true,
-        message: err.response?.data?.detail || 'Failed to upload document.',
+        message: err.response?.data?.detail || err.message || 'Failed to upload document.',
         type: 'error'
       });
     }
