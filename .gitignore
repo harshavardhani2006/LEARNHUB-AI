@@ -1,0 +1,57 @@
+# ── Environment & Secrets ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+# Keep .env.example and .env.production template (no real secrets)
+# but ignore any real filled production env
+.env.production.local
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+dist/
+build/
+.output/
+frontend/dist/
+
+# ── Python / Backend ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+venv/
+.venv/
+env/
+.env/
+*.sqlite3
+.Python
+
+# ── Vector Store / FAISS ──────────────────────────────────────
+faiss_indexes/
+*.index
+*.faiss
+
+# ── Logs ──────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+logs/
+
+# ── IDE & OS ──────────────────────────────────────────────────
+.vscode/
+.idea/
+.mcp.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Temporary scripts (cleanup) ───────────────────────────────
+backend/check_*.py
+backend/show_*.py
+backend/make_*.py
+backend/fix_*.py
+backend/update_*.py
+backend/test_*.py

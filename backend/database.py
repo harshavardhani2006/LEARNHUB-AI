@@ -1,0 +1,10 @@
+from supabase import create_client, Client
+from config import settings
+
+if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+    print("Warning: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set.")
+
+supabase: Client = create_client(
+    settings.SUPABASE_URL,
+    settings.SUPABASE_SERVICE_ROLE_KEY
+)
